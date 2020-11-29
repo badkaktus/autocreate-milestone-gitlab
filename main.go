@@ -16,39 +16,22 @@ import (
 	"github.com/badkaktus/gorocket"
 )
 
-//type Config struct {
-//	Host          string `yaml:"host"`
-//	MilestoneName string `yaml:"nameTemplate"`
-//	Token         string `yaml:"privateToken"`
-//	Group         string `yaml:"groupID"`
-//	Length        int    `yaml:"mileStoneLength"`
-//	Rocket        struct {
-//		URL      string `yaml:"url"`
-//		User     string `yaml:"user"`
-//		Password string `yaml:"password"`
-//		Msg      string `yaml:"msg"`
-//		Channel  string `yaml:"channel"`
-//	} `yaml:"rocket"`
-//}
-
 type Milestone struct {
-	ID  int `json:"id"`
-	Iid int `json:"iid"`
-	//GroupID     int       `json:"group_id"`
+	ID          int    `json:"id"`
+	Iid         int    `json:"iid"`
 	Title       string `json:"title"`
 	Description string `json:"description"`
 	State       string `json:"state"`
-	//CreatedAt   time.Time `json:"created_at"`
-	//UpdatedAt   time.Time `json:"updated_at"`
-	DueDate   string `json:"due_date"`
-	StartDate string `json:"start_date"`
-	WebURL    string `json:"web_url"`
+	DueDate     string `json:"due_date"`
+	StartDate   string `json:"start_date"`
+	WebURL      string `json:"web_url"`
 }
 
 var glURL, glTemplate, glToken, rocketURL, rocketUser, rocketPass, rocketChannel *string
 var glGroupId, mlLength *int
 var client *http.Client
 var rocketClient *gorocket.Client
+var lastIssetDay time.Time
 
 func main() {
 	glURL = flag.String("gitlaburl", "", "GitLab URL")
@@ -87,7 +70,7 @@ func lastMilestone() {
 
 	json.Unmarshal(httpHelper("GET", url, map[string]interface{}{}), &allML)
 
-	lastDayOfMilestones := []int64{}
+	var lastDayOfMilestones []int64
 	for _, k := range allML {
 		t, _ := time.Parse("2006-01-02", k.DueDate)
 		lastDayOfMilestones = append(lastDayOfMilestones, t.Unix())
@@ -95,16 +78,19 @@ func lastMilestone() {
 
 	sort.Slice(lastDayOfMilestones, func(i, j int) bool { return lastDayOfMilestones[i] < lastDayOfMilestones[j] })
 
-	lastIssetDay := time.Unix(lastDayOfMilestones[len(lastDayOfMilestones)-1], 0)
+	lastIssetDay = time.Unix(lastDayOfMilestones[len(lastDayOfMilestones)-1], 0)
 
-	if (lastIssetDay.Sub(time.Now()).Hours() / 24) < 14 {
+	fmt.Println("lastIssetDay", lastIssetDay)
+
+	for (lastIssetDay.Sub(time.Now()).Hours() / 24) < 14 {
 		createMileStone(lastIssetDay)
 	}
+
 }
 
-func createMileStone(lastIssetDay time.Time) {
-	milestoneStartDate := lastIssetDay.AddDate(0, 0, 1)
-	milestoneDueDate := lastIssetDay.AddDate(0, 0, *mlLength)
+func createMileStone(lastDay time.Time) {
+	milestoneStartDate := lastDay.AddDate(0, 0, 1)
+	milestoneDueDate := lastDay.AddDate(0, 0, *mlLength)
 
 	_, week := milestoneStartDate.ISOWeek()
 	weekStr := strconv.Itoa(week)
@@ -139,6 +125,7 @@ func createMileStone(lastIssetDay time.Time) {
 	if err != nil || hresp.Success == false {
 		log.Printf("Sending message to Rocket.Chat error")
 	}
+	lastIssetDay = milestoneDueDate
 }
 
 func httpHelper(method, url string, sendData map[string]interface{}) []byte {
